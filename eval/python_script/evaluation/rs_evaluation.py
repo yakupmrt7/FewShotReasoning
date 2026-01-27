@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
 from accelerate import Accelerator
 from accelerate.utils import InitProcessGroupKwargs
 from PIL import Image
@@ -42,6 +43,10 @@ BENCH_DATASETS = {
     "vqa_LR-comp": ("RSVQA_LR-comp_RSVQA.json", "vqa"),
     "vqa_LR-pre": ("RSVQA_LR-presence_RSVQA.json", "vqa"),
     "vqa_LR-rural": ("RSVQA_LR-rural_urban_RSVQA.json", "vqa"),
+    # custom vqa
+    "VQA_self-eval": ("VQA_self-eval.json", "vqa"),
+    #custom cls
+    "CLS_self-eval": ("CLS_self-eval.json", "cls"),
     # vg
     "rs_vg": ("VG_DOIR_RSVG_test.json", "bbox"),
     # LHRS-Bench
@@ -288,7 +293,7 @@ def eval_results_bbox(
                 final_dict["answer"].append(str(result_dict["answer"]))
                 final_dict["pred"].append(str(result_dict["pred"]))
                 final_dict["answer_bbox"].append(str(answer))
-                final_dict["pred_bbox"].append(str(pred))
+                final_dict["pred_bbox"].append(str(pred_bbox))  
                 final_dict["pred_bbox_ori"].append(str(pred_bbox_ori))
                 final_dict["iou"].append(iou)
         else:
@@ -440,10 +445,16 @@ def infer_single(model, anns_json_path, anns, task_type):
     if "type" in anns.keys():
         result_dict["type"] = anns["type"]
 
-    outputs = model.generate(prompt=question, image_files=fn_full)
-    if isinstance(outputs, list):
-        outputs = outputs[0]
-    result_dict["pred"] = outputs
+    try:
+        outputs = model.generate(prompt=question, image_files=fn_full)
+        if isinstance(outputs, list):
+            outputs = outputs[0]
+        result_dict["pred"] = outputs
+    except Exception as e:
+        logger.error(f"Error processing {fn_full}: {str(e)}")
+        result_dict["pred"] = f"ERROR: {str(e)}"
+        result_dict["error"] = True
+
     return result_dict
 
 
@@ -470,6 +481,10 @@ def infer_model(
         result_dict = infer_single(model, anns_json_path, anns, task_type)
 
         final_results.append(json.dumps(result_dict))
+
+        # Clear CUDA cache periodically to prevent OOM accumulation
+        if (idx + 1) % 10 == 0:
+            torch.cuda.empty_cache()
 
     if world_size > 1:
         model.accelerator.wait_for_everyone()

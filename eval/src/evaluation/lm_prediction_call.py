@@ -224,22 +224,32 @@ class VLLMLM(LM):
         return [list(map(float, coord)) for coord in coords]
 
     def _extract_bbox_qwen2vl(self, text):
-        pattern = re.compile(
-            r"\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\),\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)"
-        )
+        # Primary pattern for reasoning format [x1, y1, x2, y2]
         reasoning_pattern = re.compile(
             r"\[(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\]"
         )
-        coords = pattern.findall(text)
+        
+        # Original Qwen2VL pattern (x1,y1),(x2,y2)
+        original_pattern = re.compile(
+            r"\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\),\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)"
+        )
+        
+        # Try reasoning pattern first
+        coords = reasoning_pattern.findall(text)
         if len(coords) == 0:
-            if self.reasoning_config:
-                reasoning_coords = reasoning_pattern.findall(text)
-                if len(reasoning_coords) == 0:
-                    return None
-                return [list(map(float, coord)) for coord in reasoning_coords]
+            # Fallback to original pattern
+            coords = original_pattern.findall(text)
+        
+        if len(coords) == 0:
+            print(f"EXTRACTION FAILED: {text}")
             return None
-        # Convert each coordinate tuple from strings to floats
-        return [list(map(float, coord)) for coord in coords]
+        
+        # Convert to float - eval code will handle scaling
+        bboxes = [list(map(float, coord)) for coord in coords]
+        
+        print(f"EXTRACTED: {bboxes} from text: {text[:100]}")
+        
+        return bboxes
 
 
 class LMDeployLM(LM):
@@ -288,16 +298,18 @@ class LMDeployLM(LM):
         else:
             config_path = os.path.join(self.model_path, "config.json")
             model_config = json.load(open(config_path, "r"))
+            print(f"DEBUG: model_type = {model_config.get('model_type', 'NOT FOUND')}")
             if (
-                "Qwen2-VL" in model_config["_name_or_path"]
-                or "qwen2_vl" in model_config["_name_or_path"]
-                or "qwen2_vl" in model_config["model_type"]
+                
+                "qwen2_vl" in model_config.get("model_type", "")
             ):
+
                 self.vg_prefix = "Output the bounding box of the following object in the image. <|object_ref_start|>"
                 self.vg_suffix = "<|object_ref_end|>"
                 self.bbox_normalize_bound = 1000
                 if self.reasoning_config:
                     self.bbox_normalize_bound = 1000
+                print("DEBUG: Setting extract_bbox to _extract_bbox_qwen2vl")
                 self.extract_bbox = self._extract_bbox_qwen2vl
             elif "InternVL" in model_config["_name_or_path"]:
                 self.vg_prefix = "Please provide the bounding box coordinate of the region this sentence describes: <ref>"
@@ -337,22 +349,35 @@ class LMDeployLM(LM):
         return [list(map(float, coord)) for coord in coords]
 
     def _extract_bbox_qwen2vl(self, text):
-        pattern = re.compile(
-            r"\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\),\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)"
-        )
+        # Primary pattern for reasoning format [x1, y1, x2, y2]
         reasoning_pattern = re.compile(
             r"\[(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\]"
         )
-        coords = pattern.findall(text)
+        
+        # Original Qwen2VL pattern (x1,y1),(x2,y2)
+        original_pattern = re.compile(
+            r"\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\),\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)"
+        )
+        
+        # Try reasoning pattern first (since you're using reasoning config)
+        coords = reasoning_pattern.findall(text)
         if len(coords) == 0:
-            if self.reasoning_config:
-                reasoning_coords = reasoning_pattern.findall(text)
-                if len(reasoning_coords) == 0:
-                    return None
-                return [list(map(float, coord)) for coord in reasoning_coords]
+            # Fallback to original pattern
+            coords = original_pattern.findall(text)
+        
+        if len(coords) == 0:
             return None
-        # Convert each coordinate tuple from strings to floats
-        return [list(map(float, coord)) for coord in coords]
+        
+        # Convert to float and ensure proper scaling
+        bboxes = []
+        for coord in coords:
+            bbox = list(map(float, coord))
+            # If values are 0-1 normalized, scale to 0-1000
+            if all(0 <= c <= 1 for c in bbox):
+                bbox = [c * 1000 for c in bbox]
+            bboxes.append(bbox)
+        
+        return bboxes
 
     def generate(self, prompt: List[str], image_files: List[str], **kwargs) -> str:
         if not isinstance(prompt, list):

@@ -53,6 +53,10 @@ if is_peft_available():
 if is_wandb_available():
     import wandb
 
+# Note: We DON'T do global monkey-patching of Qwen2VLModel.get_rope_index here
+# because with DeepSpeed ZeRO-3, models are wrapped and the class-level patch doesn't work.
+# Instead, we patch the instance's get_rope_index method inside compute_loss() during generation.
+
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
 # rewards. When it's a string, it's a model ID, so it's loaded as a pretrained model.
 RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
@@ -168,6 +172,7 @@ class Qwen2VLGRPOTrainer(Trainer):
         # Trained model
         model_init_kwargs = args.model_init_kwargs or {}
         model_init_kwargs["attn_implementation"] = attn_implementation
+        model_init_kwargs["local_files_only"] = True
         if isinstance(model, str):
             model_id = model
             torch_dtype = torch.bfloat16 #model_init_kwargs.get("torch_dtype")
@@ -272,10 +277,14 @@ class Qwen2VLGRPOTrainer(Trainer):
         self.max_prompt_length = args.max_prompt_length
         self.max_completion_length = args.max_completion_length  # = |o_i| in the GRPO paper
         self.num_generations = args.num_generations  # = G in the GRPO paper
+        # GENERATION CONFIG - Update in your grpo.py file:
+
         self.generation_config = GenerationConfig(
             max_new_tokens=self.max_completion_length,
             do_sample=True,
-            temperature=1,  # HACK
+            temperature=0.8,      # Between 0.5 and 1.1
+            top_k=40,             # Between 30 and 50
+            top_p=0.9,            # Between 0.85 and 0.95
             num_return_sequences=self.num_generations,
             pad_token_id=pad_token_id,
         )
@@ -338,36 +347,79 @@ class Qwen2VLGRPOTrainer(Trainer):
         prompts = [x["prompt"] for x in inputs]
         prompts_text = [maybe_apply_chat_template(example, self.processing_class)["prompt"] for example in inputs]
         images = [x["image"] for x in inputs]
-        prompt_inputs = self.processing_class(
-            text=prompts_text,
-            images=images,
-            return_tensors="pt",
-            padding=True,
-            padding_side="left",
-            add_special_tokens=False,
-        )
-        prompt_inputs = super()._prepare_inputs(prompt_inputs)
 
-        if self.max_prompt_length is not None:
-            prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -self.max_prompt_length :]
-            prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -self.max_prompt_length :]
+        # Process samples individually - store as list, don't batch to avoid vision token padding issues
+        batch_prompt_inputs = []
+        for text, image in zip(prompts_text, images):
+            single_input = self.processing_class(
+                text=[text],
+                images=[image],
+                return_tensors="pt",
+                padding=False,
+            )
+            single_input = super()._prepare_inputs(single_input)
+
+            # Don't modify attention_mask - use processor's output as-is
+            # The mismatch happens inside model's get_rope_index during generation
+            # Just ensure all tensors are on the correct device
+
+            batch_prompt_inputs.append(single_input)
+
+        # Note: For vision-language models, we skip truncation to avoid misalignment
+        # between vision tokens and pixel values. The processor handles length limits.
+        # if self.max_prompt_length is not None:
+        #     prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -self.max_prompt_length :]
+        #     prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -self.max_prompt_length :]
 
         # Generate completions
         with unwrap_model_for_generation(model, self.accelerator) as unwrapped_model:
-            # prompt_completion_ids = unwrapped_model.generate(**prompt_inputs, generation_config=self.generation_config)
+            # Patch get_rope_index to fix attention_mask/input_ids mismatch for Qwen2VL
+            # The method is on Qwen2VLForConditionalGeneration directly, NOT on model.model
+            original_get_rope_index = None
+            if hasattr(unwrapped_model, 'get_rope_index'):
+                original_get_rope_index = unwrapped_model.get_rope_index
+                # Create a wrapper that truncates attention_mask to match input_ids
+                import types
+                def make_patched_method(orig_method):
+                    def patched_get_rope_index(self_model, input_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None):
+                        # Fix: Truncate attention_mask to match input_ids length if there's a mismatch
+                        if attention_mask is not None and input_ids is not None:
+                            if attention_mask.size(1) != input_ids.size(1):
+                                attention_mask = attention_mask[:, :input_ids.size(1)]
+                        return orig_method(input_ids, image_grid_thw, video_grid_thw, attention_mask)
+                    return patched_get_rope_index
 
-            # Generate N times, each generate one with the temp_generation_config , stack the output_ids to prompt_completion_ids, pad the empty places with number 151613
-            num_generations = self.generation_config.num_return_sequences
-            temp_generation_config = copy.deepcopy(self.generation_config)
-            temp_generation_config.num_return_sequences = 1
+                unwrapped_model.get_rope_index = types.MethodType(
+                    make_patched_method(original_get_rope_index),
+                    unwrapped_model
+                )
 
+            # Temporarily disable gradient checkpointing during generation
+            is_grad_checkpointing = unwrapped_model.is_gradient_checkpointing
+            if is_grad_checkpointing:
+                unwrapped_model.gradient_checkpointing_disable()
+
+            # Generate all completions for each sample using num_return_sequences for parallelism
+            # This is much faster than sequential generation in a loop
+            num_generations = self.generation_config.num_return_sequences  # e.g., 4
             all_completions = []
 
-            for i in range(num_generations):  # -1 because we already have one generation
-                completion = unwrapped_model.generate(**prompt_inputs, generation_config=temp_generation_config)
-                all_completions.append(completion)
+            for single_sample in batch_prompt_inputs:
+                # Generate all N completions at once using num_return_sequences
+                completions = unwrapped_model.generate(**single_sample, generation_config=self.generation_config)
+                # completions shape: (num_return_sequences, seq_len)
+                all_completions.append(completions)
+
+            # Restore original get_rope_index
+            if original_get_rope_index is not None:
+                unwrapped_model.get_rope_index = original_get_rope_index
+
+            # Re-enable gradient checkpointing if it was enabled
+            if is_grad_checkpointing:
+                unwrapped_model.gradient_checkpointing_enable()
 
             # Stack all completions and pad if needed
+            # all_completions is a list of tensors, each with shape (num_generations, seq_len)
             max_length = max(completion.size(1) for completion in all_completions)
             padded_completions = []
 
@@ -384,11 +436,34 @@ class Qwen2VLGRPOTrainer(Trainer):
                     padded_completion = completion
                 padded_completions.append(padded_completion)
 
-            # Stack all padded completions
+            # Stack all padded completions: (batch_size * num_generations, seq_len)
             prompt_completion_ids = torch.cat(padded_completions, dim=0)
 
-        prompt_length = prompt_inputs["input_ids"].size(1)
-        completion_ids = prompt_completion_ids[:, prompt_length:]
+        # Calculate prompt lengths for each sample (they may differ without padding)
+        prompt_lengths = [inp["input_ids"].size(1) for inp in batch_prompt_inputs]
+        # Repeat for num_generations per sample
+        prompt_lengths_expanded = [length for length in prompt_lengths for _ in range(num_generations)]
+
+        # Extract completions (each may have different prompt length)
+        completion_ids_list = []
+        for i, (completion, prompt_len) in enumerate(zip(torch.split(prompt_completion_ids, 1, dim=0), prompt_lengths_expanded)):
+            completion_ids_list.append(completion[:, prompt_len:])
+
+        # Pad completion_ids to same length
+        max_completion_len = max(c.size(1) for c in completion_ids_list)
+        padded_completion_ids = []
+        for c in completion_ids_list:
+            if c.size(1) < max_completion_len:
+                padding = torch.full(
+                    (c.size(0), max_completion_len - c.size(1)),
+                    self.processing_class.tokenizer.pad_token_id,
+                    dtype=c.dtype,
+                    device=c.device,
+                )
+                padded_completion_ids.append(torch.cat([c, padding], dim=1))
+            else:
+                padded_completion_ids.append(c)
+        completion_ids = torch.cat(padded_completion_ids, dim=0)
 
         # Get the per-token log probabilities for the completions for the model and the reference model
         def get_per_token_logps(model, input_ids, **kwargs):
@@ -403,23 +478,60 @@ class Qwen2VLGRPOTrainer(Trainer):
                 per_token_logps.append(token_log_prob)
             return torch.stack(per_token_logps)
 
-        prompt_inputs.pop("input_ids")
-        prompt_inputs.pop("attention_mask")
-        # Okay I am assuming that the inputs are Qwen2VL processor
-        # and no video for now, repeat the image for each completion
-        prompt_inputs["pixel_values"] = prompt_inputs["pixel_values"].repeat(len(prompt_completion_ids), 1)
-        prompt_inputs["image_grid_thw"] = prompt_inputs["image_grid_thw"].repeat(len(prompt_completion_ids), 1)
+        # Build combined inputs for logp computation from individual samples
+        # Collect pixel_values and image_grid_thw for all samples and repeat for each generation
+        all_pixel_values = []
+        all_image_grid_thw = []
+        for inp in batch_prompt_inputs:
+            for _ in range(num_generations):
+                all_pixel_values.append(inp["pixel_values"])
+                all_image_grid_thw.append(inp["image_grid_thw"])
+        
+        combined_pixel_values = torch.cat(all_pixel_values, dim=0)
+        combined_image_grid_thw = torch.cat(all_image_grid_thw, dim=0)
+        
+        prompt_inputs = {
+            "pixel_values": combined_pixel_values,
+            "image_grid_thw": combined_image_grid_thw,
+        }
+        
         per_token_logps = get_per_token_logps(model, prompt_completion_ids, **prompt_inputs)
-        # Get rid of the prompt (-1 because of the shift done in get_per_token_logps)
-        per_token_logps = per_token_logps[:, prompt_length - 1 :]
+        
+        # Slice per-token logps per sample (different prompt lengths)
+        # -1 because of the shift done in get_per_token_logps
+        per_token_logps_sliced = []
+        for i, prompt_len in enumerate(prompt_lengths_expanded):
+            per_token_logps_sliced.append(per_token_logps[i:i+1, prompt_len - 1:])
+        # Pad to same length
+        max_logp_len = max(t.size(1) for t in per_token_logps_sliced)
+        per_token_logps_list = []
+        for t in per_token_logps_sliced:
+            if t.size(1) < max_logp_len:
+                padding = torch.zeros(1, max_logp_len - t.size(1), device=t.device, dtype=t.dtype)
+                per_token_logps_list.append(torch.cat([t, padding], dim=1))
+            else:
+                per_token_logps_list.append(t)
+        per_token_logps = torch.cat(per_token_logps_list, dim=0)
 
         with torch.inference_mode():
             if self.ref_model is not None:
-                ref_per_token_logps = get_per_token_logps(self.ref_model, prompt_completion_ids, **prompt_inputs) # tch fix_bug
+                ref_per_token_logps_raw = get_per_token_logps(self.ref_model, prompt_completion_ids, **prompt_inputs)
             else:
                 with self.accelerator.unwrap_model(model).disable_adapter():
-                    ref_per_token_logps = get_per_token_logps(model, prompt_completion_ids, **prompt_inputs) # tch fix_bug
-        ref_per_token_logps = ref_per_token_logps[:, prompt_length - 1 :]
+                    ref_per_token_logps_raw = get_per_token_logps(model, prompt_completion_ids, **prompt_inputs)
+        
+        # Slice ref logps per sample (same as above)
+        ref_per_token_logps_sliced = []
+        for i, prompt_len in enumerate(prompt_lengths_expanded):
+            ref_per_token_logps_sliced.append(ref_per_token_logps_raw[i:i+1, prompt_len - 1:])
+        ref_per_token_logps_list = []
+        for t in ref_per_token_logps_sliced:
+            if t.size(1) < max_logp_len:
+                padding = torch.zeros(1, max_logp_len - t.size(1), device=t.device, dtype=t.dtype)
+                ref_per_token_logps_list.append(torch.cat([t, padding], dim=1))
+            else:
+                ref_per_token_logps_list.append(t)
+        ref_per_token_logps = torch.cat(ref_per_token_logps_list, dim=0)
 
         # Compute the KL divergence between the model and the reference model
         per_token_kl = torch.exp(ref_per_token_logps - per_token_logps) - (ref_per_token_logps - per_token_logps) - 1
