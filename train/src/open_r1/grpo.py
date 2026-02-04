@@ -127,7 +127,7 @@ def accuracy_reward(completions, solution, **kwargs):
         answer = sol[1]
         question = sol[2]
         image = sol[3]
-        image_type = detect_image_mime_from_base64(image)
+        # image_type = detect_image_mime_from_base64(image)  # Unused, commented out to avoid errors
 
         # Extract the text within <answer> tags; if not found, use the full content.
         answer_match = re.search(r"<answer>(.*?)</answer>", content, re.DOTALL)

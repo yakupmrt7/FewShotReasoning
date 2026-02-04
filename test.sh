@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=grpo_cls_3800
+#SBATCH --job-name=grpo_vqa_363
 #SBATCH --output=grpo-%j.out
 #SBATCH --error=grpo-%j.err
 #SBATCH --partition=kolyoz-cuda
@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:4
 #SBATCH --time=3-00:00:00
-#SBATCH -C H200
+#SBATCH -C H100
 
 export PATH="/arf/home/aalatan/mert/envs/train2/bin:$PATH"
 export CONDA_PREFIX="/arf/home/aalatan/mert/envs/train2"
@@ -20,7 +20,7 @@ cd /arf/scratch/aalatan/FewShotReasoning/train
 chmod +x /arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages/wandb/bin/wandb-core
 
 export PYTHONPATH=/arf/scratch/aalatan/FewShotReasoning/train/src:/arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages:$PYTHONPATH
-export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-CLS-Balanced-1000samples-1epoch-H200$(date +%Y-%m-%d-%H-%M-%S)
+export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-TEST-$(date +%Y-%m-%d-%H-%M-%S)
 export WANDB_MODE=offline
 export WANDB_DIR=/arf/scratch/aalatan/FewShotReasoning/train/wandb
 export GPUS_PER_NODE=4
@@ -52,26 +52,28 @@ python -u -m torch.distributed.run \
     src/open_r1/grpo.py \
     --deepspeed local_scripts/zero3.json \
     --output_dir checkpoints/${WANDB_RUN_NAME} \
-    --model_name_or_path /arf/scratch/aalatan/Qwen2-VL-2B-CLS-CoT \
-    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_cls_balanced_500_500 \
-    --max_prompt_length 4096 \
-    --max_completion_length 512 \
+    --model_name_or_path /arf/scratch/aalatan/Qwen2-VL-2B-VQA-CoT \
+    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_vqa_self_eval_balanced_1to1 \
+    --max_prompt_length 8192 \
+    --max_completion_length 8192 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
     --logging_steps 1 \
     --bf16 true \
-    --beta 0.05 \
+    --beta 0.01 \
     --report_to wandb \
-    --learning_rate 1e-6 \
+    --learning_rate 1e-7 \
     --gradient_checkpointing true \
     --attn_implementation flash_attention_2 \
-    --max_pixels 1204224 \
+    --max_pixels 2359296 \
     --save_total_limit 15 \
-    --num_train_epochs 1 \
+    --num_train_epochs 3 \
     --num_generations 8 \
-    --save_steps 10 \
+    --save_steps 25 \
     --run_name $WANDB_RUN_NAME \
     --disable_tqdm false
 
 echo "Training completed!"
 echo "WandB logs saved to: $WANDB_DIR"
+
+
