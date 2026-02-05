@@ -116,7 +116,8 @@ def detect_image_mime_from_base64(b64_string: str) -> str:
         raise ValueError("Unknown or unsupported image format")
 
 def accuracy_reward(completions, solution, **kwargs):
-    """Custom reward function based on keyword presence and a solution flag."""
+    """Custom reward function based on keyword presence and a solution flag.
+    Weighted at 2.0 to make accuracy the primary signal."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
@@ -139,10 +140,10 @@ def accuracy_reward(completions, solution, **kwargs):
             if student_answer.lower().replace('.', '') == ground_truth.lower().replace('.', ''):
                 reward = 1.0
         elif answer_type == "2": #bounding box
-            try: 
+            try:
                 nums = [int(n) for n in re.findall(r'\d+', student_answer)]
                 student_answer = [nums[i:i+4] for i in range(0, len(nums), 4)][0]
-                
+
                 nums_gt = [int(n) for n in re.findall(r'\d+', answer)]
                 ground_truth = [nums[i:i+4] for i in range(0, len(nums_gt), 4)][0]
                 # Calculate the intersection over union (IoU) between the two bounding boxes.
@@ -159,9 +160,11 @@ def accuracy_reward(completions, solution, **kwargs):
             except Exception as e:
                 print(f"IoU error: {e}")
                 reward = 0.0
-        
+
+        # Apply 2.0 weight to make accuracy the primary signal
+        reward = reward * 2.0
         rewards.append(reward)
-        
+
         if os.getenv("DEBUG_MODE") == "true":
             log_path = os.getenv("LOG_PATH")
             with open(log_path, "a") as f:
@@ -172,11 +175,12 @@ def accuracy_reward(completions, solution, **kwargs):
 
 
 def format_reward(completions, **kwargs):
-    """Reward function that checks if the completion has a specific format."""
+    """Reward function that checks if the completion has a specific format.
+    Weighted at 0.2 to maintain CoT structure without dominating the loss."""
     pattern = r"<reasoning>.*?</reasoning>\s*<answer>.*?</answer>"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content, re.DOTALL) for content in completion_contents]
-    return [1.0 if match else 0.0 for match in matches]
+    return [0.2 if match else 0.0 for match in matches]
 
 
 reward_funcs_registry = {
