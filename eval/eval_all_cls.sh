@@ -3,7 +3,7 @@
 # Usage: ./eval_all_cls.sh
 # Only change MODEL_PATH below!
 
-MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-Balanced-1000samples-1epoch2026-02-03-19-23-52/final"
+MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-Balanced-1000samples-1epoch-ThirdRun-NewReward2026-02-05-17-53-23/final"
 
 # ============== DO NOT MODIFY BELOW ==============
 

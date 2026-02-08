@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Create BALANCED GRPO dataset for CLS with 500 misclassified + 500 correct samples.
+Create GRPO dataset for CLS with 300 misclassified (30%) + 700 correct (70%) samples.
 This script:
 1. Reads CLS evaluation results to find misclassified and correctly classified samples
-2. Samples 500 of each type
+2. Samples 300 misclassified and 700 correctly classified samples
 3. Matches them with the original CoT dataset
 4. FILTERS OUT images larger than 1000x1000 pixels
 5. Creates a HuggingFace dataset in Arrow format matching the GRPO format
@@ -34,8 +34,8 @@ def check_image_size(image_path, max_size=1000):
         print(f"  Error checking image size: {e}")
         return False, 0, 0
 
-def load_eval_results(eval_json_path, target_count=500):
-    """Load evaluation results and sample target_count of each type."""
+def load_eval_results(eval_json_path, target_misclassified=300, target_correct=700):
+    """Load evaluation results and sample specified counts of each type."""
     with open(eval_json_path, 'r') as f:
         eval_data = json.load(f)
 
@@ -47,9 +47,9 @@ def load_eval_results(eval_json_path, target_count=500):
     print(f"Misclassified samples available: {len(misclassified)}")
     print(f"Correctly classified samples available: {len(correctly_classified)}")
 
-    # Sample target_count from each (or all if less than target_count)
-    num_misclassified = min(target_count, len(misclassified))
-    num_correct = min(target_count, len(correctly_classified))
+    # Sample target counts from each (or all if less than target)
+    num_misclassified = min(target_misclassified, len(misclassified))
+    num_correct = min(target_correct, len(correctly_classified))
 
     sampled_misclassified = random.sample(misclassified, num_misclassified)
     sampled_correct = random.sample(correctly_classified, num_correct)
@@ -174,7 +174,7 @@ def create_grpo_entry(item, cot_dataset, image_dir, max_image_size=1000):
     return entry
 
 def create_balanced_grpo_dataset(misclassified, correctly_classified, cot_dataset, image_dir, output_dir, max_image_size=1000):
-    """Create balanced GRPO dataset with equal misclassified and correct samples."""
+    """Create GRPO dataset with specified misclassified and correct samples."""
 
     # Combine all samples
     all_samples = misclassified + correctly_classified
@@ -240,28 +240,29 @@ def main():
     eval_json_path = "/arf/scratch/aalatan/FewShotReasoning/eval/eval_results/CLS_self-eval/CLS_self-eval_Qwen-2VL-2B-CLS-CoT_eval.json"
     cot_json_path = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval.json"
     image_dir = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval"
-    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_cls_balanced_500_500"
+    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_cls_300_700"
 
     # Configuration
-    TARGET_SAMPLES = 500  # 500 misclassified + 500 correct = 1000 total
+    TARGET_MISCLASSIFIED = 300  # 30% hard (misclassified)
+    TARGET_CORRECT = 700  # 70% easy (correctly classified)
     MAX_IMAGE_SIZE = 1000  # Max dimension in pixels
 
     print("="*60)
-    print("CREATING BALANCED CLS GRPO DATASET")
+    print("CREATING CLS GRPO DATASET (70% EASY / 30% HARD)")
     print("="*60)
-    print(f"Target: {TARGET_SAMPLES} misclassified + {TARGET_SAMPLES} correct")
+    print(f"Target: {TARGET_MISCLASSIFIED} misclassified (30%) + {TARGET_CORRECT} correct (70%)")
     print(f"Filtering: Only images <= {MAX_IMAGE_SIZE}x{MAX_IMAGE_SIZE} pixels")
     print("="*60)
 
     # Load data
     print("\nLoading evaluation results...")
-    misclassified, correctly_classified = load_eval_results(eval_json_path, target_count=TARGET_SAMPLES)
+    misclassified, correctly_classified = load_eval_results(eval_json_path, target_misclassified=TARGET_MISCLASSIFIED, target_correct=TARGET_CORRECT)
 
     print("\nLoading CoT dataset...")
     cot_dataset = load_cot_dataset(cot_json_path)
 
-    # Create balanced GRPO dataset
-    print("\nCreating balanced GRPO dataset...")
+    # Create GRPO dataset
+    print("\nCreating GRPO dataset...")
     dataset = create_balanced_grpo_dataset(
         misclassified,
         correctly_classified,
@@ -272,10 +273,11 @@ def main():
     )
 
     print("\n" + "="*60)
-    print("✓ BALANCED CLS GRPO DATASET CREATION COMPLETED!")
+    print("✓ CLS GRPO DATASET CREATION COMPLETED!")
     print("="*60)
     print(f"Output: {output_dir}")
     print(f"Total samples: {len(dataset['train'])}")
+    print(f"Distribution: 70% easy (correct) / 30% hard (misclassified)")
     print(f"All images are <= {MAX_IMAGE_SIZE}x{MAX_IMAGE_SIZE} pixels")
     print("="*60)
 

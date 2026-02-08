@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# H200 optimization - fixes cache thrashing issue
+import setup_h200
+
 import os
 import re
 import ast

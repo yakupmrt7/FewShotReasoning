@@ -281,7 +281,7 @@ class Qwen2VLGRPOTrainer(Trainer):
         self.generation_config = GenerationConfig(
             max_new_tokens=self.max_completion_length,
             do_sample=True,
-            temperature=0.6,
+            temperature=0.8,
             top_k=40,
             top_p=0.95,
             num_return_sequences=self.num_generations,
