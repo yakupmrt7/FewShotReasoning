@@ -3,7 +3,7 @@
 # Usage: ./eval_all_cls.sh
 # Only change MODEL_PATH below!
 
-MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-Balanced-1000samples-1epoch-ThirdRun-NewReward2026-02-05-17-53-23/final"
+MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-70Easy-30Hard-Temp0.8-accum8-2epoch2026-02-09-14-45-41/final"
 
 # ============== DO NOT MODIFY BELOW ==============
 
@@ -44,6 +44,7 @@ for TASK in "${CLS_TASKS[@]}"; do
 #SBATCH --gres=gpu:1
 #SBATCH --time=3-00:00:00
 #SBATCH -C H100
+#SBATCH --exclude=kolyoz21
 
 # Don't source bashrc - manually activate conda environment (scorers2)
 export PATH="/arf/home/aalatan/mert/envs/scorers2/bin:\$PATH"

@@ -226,7 +226,7 @@ class Qwen2VLGRPOTrainer(Trainer):
         # Processing class
         if processing_class is None:
             if "Qwen" in model_id or "Aria" in model_id:
-                processing_class = AutoProcessor.from_pretrained(model_id)
+                processing_class = AutoProcessor.from_pretrained(model_id, use_fast=True)
                 pad_token_id = processing_class.tokenizer.pad_token_id
                 processing_class.pad_token_id = pad_token_id
                 processing_class.eos_token_id = processing_class.tokenizer.eos_token_id

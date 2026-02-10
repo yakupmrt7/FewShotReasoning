@@ -1,0 +1,204 @@
+# Environment: train2 (conda env at /arf/home/aalatan/mert/envs/train2)
+# Python: 3.10.18
+# PyTorch: 2.8.0+cu128  (CUDA 12.8)
+# Captured: 2026-02-10
+#
+# To recreate:
+#   conda create -n train2 python=3.10
+#   conda activate train2
+#   pip install -r requirements.txt
+#   pip install -e train/   # install this repo in editable mode
+#
+# NOTE: flash_attn requires matching CUDA + torch build. If your torch version
+# differs, find the correct wheel at:
+# https://github.com/Dao-AILab/flash-attention/releases
+
+# --- Core training stack ---
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+triton==3.4.0
+accelerate==1.10.1
+transformers==4.50.3
+trl==0.18.2
+deepspeed==0.15.4
+datasets==4.2.0
+tokenizers==0.21.4
+safetensors==0.6.2
+peft==0.14.0
+
+# --- Flash Attention (pre-built wheel, CUDA 12.8 + torch 2.8) ---
+flash_attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.3/flash_attn-2.7.3+cu12torch2.8cxx11abiTRUE-cp310-cp310-linux_x86_64.whl#sha256=8c520d6093f91152dc8fda1e9af76617dc7d18d0ff34ccfced8522af0b38066a
+
+# --- Liger kernel (fused GPU kernels for training) ---
+liger_kernel==0.5.2
+
+# --- Evaluation ---
+lighteval @ git+https://github.com/huggingface/lighteval.git@4f381b352c0e467b5870a97d41cb66b487a2c503
+math-verify==0.8.0
+rouge_score==0.1.2
+sacrebleu==2.5.1
+nltk==3.9.1
+spacy==3.7.2
+
+# --- HuggingFace ecosystem ---
+huggingface-hub==0.26.5
+hf_transfer==0.1.9
+hf-xet==1.2.0
+fsspec==2025.12.0
+pyarrow==21.0.0
+
+# --- NVIDIA CUDA packages ---
+nvidia-cublas-cu12==12.8.4.1
+nvidia-cuda-cupti-cu12==12.8.90
+nvidia-cuda-nvrtc-cu12==12.8.93
+nvidia-cuda-runtime-cu12==12.8.90
+nvidia-cudnn-cu12==9.10.2.21
+nvidia-cufft-cu12==11.3.3.83
+nvidia-cufile-cu12==1.13.1.3
+nvidia-curand-cu12==10.3.9.90
+nvidia-cusolver-cu12==11.7.3.90
+nvidia-cusparse-cu12==12.5.8.93
+nvidia-cusparselt-cu12==0.7.1
+nvidia-nccl-cu12==2.27.3
+nvidia-nvjitlink-cu12==12.8.93
+nvidia-nvshmem-cu12==3.3.20
+nvidia-nvtx-cu12==12.8.90
+cuda-bindings==12.9.4
+cuda-pathfinder==1.2.2
+
+# --- Experiment tracking ---
+wandb==0.18.3
+sentry-sdk==2.42.0
+GitPython==3.1.45
+gitdb==4.0.12
+smmap==5.0.2
+
+# --- Data / numerics ---
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+sympy==1.14.0
+mpmath==1.3.0
+latex2sympy2_extended==1.10.2
+pytokens==0.2.0
+
+# --- Networking / async ---
+aiohttp==3.13.1
+aiohappyeyeballs==2.6.1
+aiosignal==1.4.0
+async-timeout==5.0.1
+httpx==0.28.1
+httpcore==1.0.9
+h11==0.16.0
+requests==2.32.5
+urllib3==2.5.0
+certifi==2025.11.12
+charset-normalizer==3.4.4
+chardet==5.2.0
+idna==3.11
+
+# --- Utilities ---
+absl-py==2.3.1
+aenum==3.1.15
+annotated-types==0.7.0
+antlr4-python3-runtime==4.13.2
+anyio==4.11.0
+attrs==25.4.0
+bitsandbytes==0.48.1
+catalogue==2.0.10
+click==8.3.1
+cloudpathlib==0.16.0
+colorama==0.4.6
+colorlog==6.10.1
+confection==0.1.5
+cymem==2.0.11
+DataProperty==1.1.0
+dill==0.4.0
+docker-pycreds==0.4.0
+einops==0.8.1
+exceptiongroup==1.3.0
+filelock==3.20.0
+frozenlist==1.8.0
+hjson==3.1.0
+iniconfig==2.1.0
+inquirerpy==0.3.4
+Jinja2==3.1.6
+joblib==1.5.2
+langcodes==3.5.0
+language_data==1.3.0
+lxml==6.0.2
+marisa-trie==1.3.1
+markdown-it-py==4.0.0
+MarkupSafe==2.1.5
+mbstrdecoder==1.1.4
+mdurl==0.1.2
+msgpack==1.1.2
+multidict==6.7.0
+multiprocess==0.70.16
+murmurhash==1.0.13
+mypy_extensions==1.1.0
+networkx==3.4.2
+ninja==1.13.0
+packaging==25.0
+parameterized==0.9.0
+pathspec==0.12.1
+pathvalidate==3.3.1
+pfzy==0.3.4
+pillow==12.0.0
+platformdirs==4.5.0
+pluggy==1.6.0
+portalocker==3.2.0
+preshed==3.0.10
+prompt_toolkit==3.0.52
+propcache==0.4.1
+protobuf==3.20.3
+psutil==7.1.0
+py-cpuinfo==9.0.0
+pycountry==24.6.1
+pydantic==2.12.3
+pydantic_core==2.41.4
+Pygments==2.19.2
+pytablewriter==1.2.1
+pytest==8.4.2
+python-dateutil==2.9.0.post0
+pytz==2025.2
+PyYAML==6.0.3
+regex==2025.9.18
+rich==14.2.0
+sentencepiece==0.2.1
+setproctitle==1.3.7
+shellingham==1.5.4
+six==1.17.0
+smart-open==6.4.0
+sniffio==1.3.1
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+srsly==2.5.1
+tabledata==1.3.4
+tabulate==0.9.0
+tcolorpy==0.1.7
+termcolor==2.3.0
+thinc==8.2.5
+threadpoolctl==3.6.0
+tomli==2.3.0
+tqdm==4.67.1
+typepy==1.3.4
+typer==0.9.4
+typer-slim==0.20.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzdata==2025.2
+wcwidth==0.2.14
+weasel==0.3.4
+xxhash==3.6.0
+yarl==1.22.0
+
+# --- Dev / code quality ---
+black==25.9.0
+blis==0.7.11
+flake8==7.3.0
+isort==7.0.0
+mccabe==0.7.0
+pycodestyle==2.14.0
+pyflakes==3.4.0
