@@ -273,11 +273,11 @@ class LMDeployLM(LM):
             top_p=self.top_p,
             do_sample=self.do_sample,
         )
-        if "SFT" in self.model_path or "COT" in self.model_path:
+        if "SFT" in self.model_path or "COT" in self.model_path.upper():
             self.cls_prefix = "{CLS}"
             self.vqa_prefix = "{VQA}"
             self.vg_prefix = "{VG}"
-            self.bbox_normalize_bound = 1000
+            self.bbox_normalize_bound = None  # outputs pixel coordinates, no scaling
             self.image_aspect_ratio = None
             self.extract_bbox = self._extract_bbox_tinyrs
         elif "EX" in self.model_path or "Instruct" in self.model_path:

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=eval_vqa_363
+#SBATCH --job-name=eval_self_vg
 #SBATCH --output=eval-%j.out
 #SBATCH --error=eval-%j.err
 #SBATCH --partition=kolyoz-cuda
@@ -25,10 +25,10 @@ export PYTHONUNBUFFERED=1
 export DISABLE_FLASH_ATTN=1
 
 SCRIPT_PATH="/arf/scratch/aalatan/FewShotReasoning/eval/python_script/evaluation/rs_evaluation.py"
-DATA_ROOT="/arf/scratch/aalatan/datasets_eval"
-OUTPUT_DIR="/arf/scratch/aalatan/FewShotReasoning/eval/eval_results/Qwen-VL-2B-GRPO-VQA-CoT-BalancedDataset-1ep-2026-01-24-18-54-55/vqa_LR-pre"
+DATA_ROOT="/arf/scratch/aalatan/Datasets_Self-Eval_VG"
+OUTPUT_DIR="/arf/scratch/aalatan/FewShotReasoning/eval/self_eval_VG/VG_self-Eval"
 model_type=lmdeploy
-MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-VQA-CoT-BalancedDataset-1ep-2026-01-24-18-54-55/final"
+MODEL_PATH="/arf/scratch/aalatan/Qwen2-VL-2B-VG-CoT"
 REASONING_CONFIG="/arf/scratch/aalatan/FewShotReasoning/eval/config/qwen2_thinking_template.json"
 
 mkdir -p $OUTPUT_DIR
@@ -48,8 +48,9 @@ CUDA_VISIBLE_DEVICES=0 accelerate launch --num_processes 1 --mixed_precision bf1
     --model_type $model_type \
     --model_path $MODEL_PATH \
     --force_inference true \
-    --task vqa_LR-pre \
+    --task VG_self-Eval \
     --reasoning_config $REASONING_CONFIG \
+    --limit 100
 
 echo "Evaluation completed!"
 echo "Results saved to: $OUTPUT_DIR"

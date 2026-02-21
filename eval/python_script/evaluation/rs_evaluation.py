@@ -47,6 +47,8 @@ BENCH_DATASETS = {
     "VQA_self-eval": ("VQA_self-eval.json", "vqa"),
     #custom cls
     "CLS_self-eval": ("CLS_self-eval.json", "cls"),
+    #custom vg
+    "VG_self-Eval": ("VG_self-Eval.json","bbox"),
     # vg
     "rs_vg": ("VG_DOIR_RSVG_test.json", "bbox"),
     # LHRS-Bench
@@ -259,21 +261,30 @@ def eval_results_bbox(
 
         l = 0
 
+        def scale_bbox(bbox, w, h):
+            """Scale bbox from model's coordinate space to pixel space.
+            When bbox_normalize_bound is None the model already outputs pixel
+            coordinates, so no scaling is applied."""
+            if model.bbox_normalize_bound is None:
+                return [float(c) for c in bbox]
+            return [
+                float(bbox[0] * w / model.bbox_normalize_bound),
+                float(bbox[1] * h / model.bbox_normalize_bound),
+                float(bbox[2] * w / model.bbox_normalize_bound),
+                float(bbox[3] * h / model.bbox_normalize_bound),
+            ]
+
         if answer_bbox is not None and pred_bbox_ori is not None:
 
             for answer, pred in zip(answer_bbox, pred_bbox_ori):
-                while calculate_area(answer) > AREA_LEVEL[l]:
+                answer_scaled = scale_bbox(answer, w, h)
+                while calculate_area(answer_scaled) > AREA_LEVEL[l]:
                     l += 1
                 level_count[l] += 1
 
                 if answer and pred and len(pred) > 0 and len(answer) > 0:
-                    pred_bbox = [
-                        float(pred[0] * w / model.bbox_normalize_bound),
-                        float(pred[1] * h / model.bbox_normalize_bound),
-                        float(pred[2] * w / model.bbox_normalize_bound),
-                        float(pred[3] * h / model.bbox_normalize_bound),
-                    ]
-                    iou = calculate_iou(answer, pred_bbox)
+                    pred_bbox = scale_bbox(pred, w, h)
+                    iou = calculate_iou(answer_scaled, pred_bbox)
 
                     if img_i % 100 == 0:
                         logger.info(
@@ -293,12 +304,13 @@ def eval_results_bbox(
                 final_dict["answer"].append(str(result_dict["answer"]))
                 final_dict["pred"].append(str(result_dict["pred"]))
                 final_dict["answer_bbox"].append(str(answer))
-                final_dict["pred_bbox"].append(str(pred_bbox))  
+                final_dict["pred_bbox"].append(str(pred_bbox))
                 final_dict["pred_bbox_ori"].append(str(pred_bbox_ori))
                 final_dict["iou"].append(iou)
         else:
             for answer in answer_bbox:
-                while calculate_area(answer) > AREA_LEVEL[l]:
+                answer_scaled = scale_bbox(answer, w, h)
+                while calculate_area(answer_scaled) > AREA_LEVEL[l]:
                     l += 1
                 level_count[l] += 1
 
