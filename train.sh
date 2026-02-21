@@ -20,7 +20,7 @@ cd /arf/scratch/aalatan/FewShotReasoning/train
 chmod +x /arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages/wandb/bin/wandb-core
 
 export PYTHONPATH=/arf/scratch/aalatan/FewShotReasoning/train/src:/arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages:$PYTHONPATH
-export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-CLS-70Easy-30Hard-Temp0.8-accum8-2epoch$(date +%Y-%m-%d-%H-%M-%S)
+export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-CLS-70Easy-30Hard-Temp1.5-2epoch-cosine$(date +%Y-%m-%d-%H-%M-%S)
 export WANDB_MODE=offline
 export WANDB_DIR=/arf/scratch/aalatan/FewShotReasoning/train/wandb
 export GPUS_PER_NODE=4
@@ -54,8 +54,8 @@ python -u -m torch.distributed.run \
     --output_dir checkpoints/${WANDB_RUN_NAME} \
     --model_name_or_path /arf/scratch/aalatan/Qwen2-VL-2B-CLS-CoT \
     --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_cls_300_700 \
-    --max_prompt_length 4096 \
-    --max_completion_length 512 \
+    --max_prompt_length 8192 \
+    --max_completion_length 8192 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --logging_steps 1 \
@@ -63,6 +63,8 @@ python -u -m torch.distributed.run \
     --beta 0.001 \
     --report_to wandb \
     --learning_rate 2e-6 \
+    --lr_scheduler_type cosine \
+    --warmup_ratio 0.05 \
     --gradient_checkpointing true \
     --attn_implementation flash_attention_2 \
     --max_pixels 1204224 \
@@ -71,7 +73,9 @@ python -u -m torch.distributed.run \
     --num_generations 8 \
     --save_steps 10 \
     --run_name $WANDB_RUN_NAME \
-    --disable_tqdm false
+    --disable_tqdm false \
+    --dataloader_num_workers 4 \
+    --dataloader_prefetch_factor 2
 
 echo "Training completed!"
 echo "WandB logs saved to: $WANDB_DIR"
