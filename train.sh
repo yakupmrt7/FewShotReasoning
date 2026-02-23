@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=grpo_cls_3800
+#SBATCH --job-name=grpo_cls_500_500
 #SBATCH --output=grpo-%j.out
 #SBATCH --error=grpo-%j.err
 #SBATCH --partition=kolyoz-cuda
@@ -20,7 +20,7 @@ cd /arf/scratch/aalatan/FewShotReasoning/train
 chmod +x /arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages/wandb/bin/wandb-core
 
 export PYTHONPATH=/arf/scratch/aalatan/FewShotReasoning/train/src:/arf/home/aalatan/mert/envs/train2/lib/python3.10/site-packages:$PYTHONPATH
-export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-CLS-70Easy-30Hard-Temp1.5-2epoch-cosine$(date +%Y-%m-%d-%H-%M-%S)
+export WANDB_RUN_NAME=Qwen-VL-2B-GRPO-500Easy-500Hard-Temp1.5-2epoch-cosine$(date +%Y-%m-%d-%H-%M-%S)
 export WANDB_MODE=offline
 export WANDB_DIR=/arf/scratch/aalatan/FewShotReasoning/train/wandb
 export GPUS_PER_NODE=4
@@ -33,13 +33,9 @@ export OMP_NUM_THREADS=1
 mkdir -p $WANDB_DIR
 
 echo "========== Job Info =========="
-echo "Job ID: $SLURM_JOB_ID"
-echo "Node: $SLURM_JOB_NODELIST"
-echo "GPUs: $GPUS_PER_NODE"
-echo "Master: $MASTER_ADDR:$MASTER_PORT"
 echo "Run: $WANDB_RUN_NAME"
-echo "WandB Dir: $WANDB_DIR"
-echo "PYTHONPATH: $PYTHONPATH"
+echo "Dataset: 500 Easy / 500 Hard"
+echo "Strategy: Temp 1.5, Cosine, 2 Epochs, Min Pixels Fixed"
 echo "=============================="
 
 python -u -m torch.distributed.run \
@@ -53,7 +49,7 @@ python -u -m torch.distributed.run \
     --deepspeed local_scripts/zero3.json \
     --output_dir checkpoints/${WANDB_RUN_NAME} \
     --model_name_or_path /arf/scratch/aalatan/Qwen2-VL-2B-CLS-CoT \
-    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_cls_300_700 \
+    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_cls_balanced_500_500 \
     --max_prompt_length 8192 \
     --max_completion_length 8192 \
     --per_device_train_batch_size 1 \
@@ -67,6 +63,7 @@ python -u -m torch.distributed.run \
     --warmup_ratio 0.05 \
     --gradient_checkpointing true \
     --attn_implementation flash_attention_2 \
+    --min_pixels 153664 \
     --max_pixels 1204224 \
     --save_total_limit 15 \
     --num_train_epochs 2 \

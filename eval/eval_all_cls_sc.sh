@@ -1,9 +1,14 @@
 #!/bin/bash
-# Submit all CLS evaluation tasks for a given model
-# Usage: ./eval_all_cls.sh
-# Only change MODEL_PATH below!
+# Submit all CLS evaluation tasks using Self-Consistency (majority voting).
+# Generates N_SAMPLES responses per image at TEMPERATURE, then takes majority vote.
+# Usage: ./eval_all_cls_sc.sh
+# Only change MODEL_PATH and SC params below!
 
-MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-1400Easy-600Hard-Temp1.5-2epoch-cosine2026-02-21-15-28-28/final"
+MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-1400Easy-600Hard-Temp1.5-1epoch2026-02-21-15-29-13/final"
+
+# Self-Consistency parameters
+N_SAMPLES=7
+SC_TEMPERATURE=0.6
 
 # ============== DO NOT MODIFY BELOW ==============
 
@@ -14,29 +19,30 @@ MODEL_NAME=$(basename $(dirname $MODEL_PATH))
 CLS_TASKS=("cls_aid" "cls_METER_ML" "cls_NWPU_RESISC45" "cls_SIRI" "cls_WHU_RS19")
 
 # Base directories
-SCRIPT_PATH="/arf/scratch/aalatan/FewShotReasoning/eval/python_script/evaluation/rs_evaluation.py"
+SC_SCRIPT_PATH="/arf/scratch/aalatan/FewShotReasoning/eval/python_script/evaluation/rs_evaluation_sc.py"
 DATA_ROOT="/arf/scratch/aalatan/datasets_eval"
 REASONING_CONFIG="/arf/scratch/aalatan/FewShotReasoning/eval/config/qwen2_thinking_template.json"
 EVAL_RESULTS_BASE="/arf/scratch/aalatan/FewShotReasoning/eval/eval_results"
 
 echo "=========================================="
-echo "Submitting CLS evaluation jobs"
+echo "Submitting CLS Self-Consistency evaluation jobs"
 echo "Model: $MODEL_NAME"
 echo "Model Path: $MODEL_PATH"
+echo "n_samples: $N_SAMPLES  |  temperature: $SC_TEMPERATURE"
 echo "=========================================="
 
 for TASK in "${CLS_TASKS[@]}"; do
-    OUTPUT_DIR="${EVAL_RESULTS_BASE}/${MODEL_NAME}/${TASK}"
+    OUTPUT_DIR="${EVAL_RESULTS_BASE}/${MODEL_NAME}/${TASK}_sc"
 
     # Create temporary job script
-    JOB_SCRIPT=$(mktemp /tmp/eval_${TASK}_XXXXXX.sh)
+    JOB_SCRIPT=$(mktemp /tmp/eval_sc_${TASK}_XXXXXX.sh)
 
     cat > "$JOB_SCRIPT" << EOF
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=eval_${TASK}
-#SBATCH --output=eval-%j.out
-#SBATCH --error=eval-%j.err
+#SBATCH --job-name=eval_sc_${TASK}
+#SBATCH --output=eval_sc-%j.out
+#SBATCH --error=eval_sc-%j.err
 #SBATCH --partition=kolyoz-cuda
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -68,31 +74,35 @@ echo "GPU: 1"
 echo "Model: ${MODEL_PATH}"
 echo "Task: ${TASK}"
 echo "Output: ${OUTPUT_DIR}"
+echo "Self-Consistency: n_samples=${N_SAMPLES}, temperature=${SC_TEMPERATURE}"
 echo "PYTHONPATH: \$PYTHONPATH"
 echo "=============================="
 
-CUDA_VISIBLE_DEVICES=0 accelerate launch --num_processes 1 --mixed_precision bf16 ${SCRIPT_PATH} \\
+CUDA_VISIBLE_DEVICES=0 accelerate launch --num_processes 1 --mixed_precision bf16 ${SC_SCRIPT_PATH} \\
     --data_root ${DATA_ROOT} \\
     --output_dir ${OUTPUT_DIR} \\
     --model_type lmdeploy \\
     --model_path ${MODEL_PATH} \\
     --force_inference true \\
     --task ${TASK} \\
-    --reasoning_config ${REASONING_CONFIG}
+    --reasoning_config ${REASONING_CONFIG} \\
+    --temperature ${SC_TEMPERATURE} \\
+    --do_sample true \\
+    --n_samples ${N_SAMPLES}
 
-echo "Evaluation completed!"
+echo "Self-Consistency evaluation completed!"
 echo "Results saved to: ${OUTPUT_DIR}"
 EOF
 
     # Submit the job
     JOB_ID=$(sbatch "$JOB_SCRIPT" | awk '{print $4}')
-    echo "Submitted ${TASK} -> Job ID: ${JOB_ID}"
+    echo "Submitted ${TASK} (SC n=${N_SAMPLES}) -> Job ID: ${JOB_ID}"
 
     # Clean up temp script
     rm "$JOB_SCRIPT"
 done
 
 echo "=========================================="
-echo "All 5 CLS jobs submitted!"
-echo "Results will be saved to: ${EVAL_RESULTS_BASE}/${MODEL_NAME}/"
+echo "All 5 CLS self-consistency jobs submitted!"
+echo "Results will be saved to: ${EVAL_RESULTS_BASE}/${MODEL_NAME}/<task>_sc/"
 echo "=========================================="

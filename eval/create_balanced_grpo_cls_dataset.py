@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Create GRPO dataset for CLS with 300 misclassified (30%) + 700 correct (70%) samples.
+Create GRPO dataset for CLS with 600 misclassified (30%) + 1400 correct (70%) samples.
 This script:
 1. Reads CLS evaluation results to find misclassified and correctly classified samples
-2. Samples 300 misclassified and 700 correctly classified samples
+2. Samples 600 misclassified and 1400 correctly classified samples
 3. Matches them with the original CoT dataset
-4. FILTERS OUT images larger than 1000x1000 pixels
+4. FILTERS OUT images larger than 2000x2000 pixels
 5. Creates a HuggingFace dataset in Arrow format matching the GRPO format
 """
 
@@ -240,12 +240,12 @@ def main():
     eval_json_path = "/arf/scratch/aalatan/FewShotReasoning/eval/eval_results/CLS_self-eval/CLS_self-eval_Qwen-2VL-2B-CLS-CoT_eval.json"
     cot_json_path = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval.json"
     image_dir = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval"
-    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_cls_300_700"
+    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_cls_600_1400"
 
     # Configuration
-    TARGET_MISCLASSIFIED = 300  # 30% hard (misclassified)
-    TARGET_CORRECT = 700  # 70% easy (correctly classified)
-    MAX_IMAGE_SIZE = 1000  # Max dimension in pixels
+    TARGET_MISCLASSIFIED = 600  # 30% hard (misclassified)
+    TARGET_CORRECT = 1400  # 70% easy (correctly classified)
+    MAX_IMAGE_SIZE = 2000  # Max dimension in pixels
 
     print("="*60)
     print("CREATING CLS GRPO DATASET (70% EASY / 30% HARD)")
@@ -278,7 +278,7 @@ def main():
     print(f"Output: {output_dir}")
     print(f"Total samples: {len(dataset['train'])}")
     print(f"Distribution: 70% easy (correct) / 30% hard (misclassified)")
-    print(f"All images are <= {MAX_IMAGE_SIZE}x{MAX_IMAGE_SIZE} pixels")
+    print(f"All images are <= {MAX_IMAGE_SIZE}x{MAX_IMAGE_SIZE} pixels (up from 1000x1000)")
     print("="*60)
 
 if __name__ == "__main__":
