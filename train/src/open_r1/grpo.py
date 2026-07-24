@@ -24,10 +24,8 @@ from typing import Optional
 import base64
 
 from datasets import load_dataset, load_from_disk
-from transformers import Qwen2VLForConditionalGeneration
+from transformers import AutoProcessor
 
-#from math_verify import parse, verify
-from open_r1.trainer import Qwen2VLGRPOTrainer
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, ScriptArguments, TrlParser, get_peft_config
 
 def my_load_dataset(dataset_path, split=None):
@@ -148,7 +146,7 @@ def accuracy_reward(completions, solution, **kwargs):
                 student_answer = [nums[i:i+4] for i in range(0, len(nums), 4)][0]
 
                 nums_gt = [int(n) for n in re.findall(r'\d+', answer)]
-                ground_truth = [nums[i:i+4] for i in range(0, len(nums_gt), 4)][0]
+                ground_truth = [nums_gt[i:i+4] for i in range(0, len(nums_gt), 4)][0]
                 # Calculate the intersection over union (IoU) between the two bounding boxes.
                 x1 = max(student_answer[0], ground_truth[0])
                 y1 = max(student_answer[1], ground_truth[1])
@@ -206,19 +204,37 @@ def main(script_args, training_args, model_args):
     # Load the dataset
     dataset = my_load_dataset(dataset_path=script_args.dataset_name)
 
-    trainer_cls = Qwen2VLGRPOTrainer
+    # Fold the ModelConfig CLI flags (--attn_implementation, --dtype) into
+    # GRPOConfig.model_init_kwargs, since the native GRPOTrainer reads model kwargs from there.
+    model_init_kwargs = training_args.model_init_kwargs or {}
+    if model_args.attn_implementation:
+        model_init_kwargs["attn_implementation"] = model_args.attn_implementation
+    if model_args.dtype and model_args.dtype != "auto":
+        model_init_kwargs["dtype"] = model_args.dtype
+    training_args.model_init_kwargs = model_init_kwargs
 
-    # Initialize the GRPO trainer
-    trainer = trainer_cls(
+    # Build the processor ourselves so we can apply the --min_pixels/--max_pixels bounds
+    # (the new Qwen image processor exposes these as size["shortest_edge"/"longest_edge"]).
+    processing_class = AutoProcessor.from_pretrained(model_args.model_name_or_path)
+    if hasattr(processing_class, "image_processor"):
+        size = dict(getattr(processing_class.image_processor, "size", None) or {})
+        if script_args.min_pixels is not None:
+            size["shortest_edge"] = script_args.min_pixels
+        if script_args.max_pixels is not None:
+            size["longest_edge"] = script_args.max_pixels
+        processing_class.image_processor.size = size
+
+    # Initialize the GRPO trainer. We use TRL's native GRPOTrainer (architecture-agnostic:
+    # it loads the model via AutoConfig + getattr(transformers, architectures[0])), instead of
+    # the old Qwen2VL-only Qwen2VLGRPOTrainer, so this works for Qwen3.5-VL checkpoints too.
+    trainer = GRPOTrainer(
         model=model_args.model_name_or_path,
         reward_funcs=reward_funcs,
         args=training_args,
         train_dataset=dataset[script_args.dataset_train_split],
         eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        processing_class=processing_class,
         peft_config=get_peft_config(model_args),
-        attn_implementation=model_args.attn_implementation,
-        max_pixels=script_args.max_pixels,
-        min_pixels=script_args.min_pixels,
     )
 
     # Train and push the model to the Hub

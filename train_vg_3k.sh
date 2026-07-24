@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=grpo_vg_qwen35
-#SBATCH --output=grpo-%j.out
-#SBATCH --error=grpo-%j.err
+#SBATCH --job-name=grpo_vg_3k_qwen35
+#SBATCH --output=grpo_vg_3k-%j.out
+#SBATCH --error=grpo_vg_3k-%j.err
 #SBATCH --partition=kolyoz-cuda
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
@@ -20,12 +20,12 @@ cd /arf/scratch/aalatan/FewShotReasoning/train
 chmod +x /arf/home/aalatan/mert/envs/recot-train-grpo/lib/python3.11/site-packages/wandb/bin/wandb-core
 
 export PYTHONPATH=/arf/scratch/aalatan/FewShotReasoning/train:/arf/scratch/aalatan/FewShotReasoning/train/src:/arf/home/aalatan/mert/envs/recot-train-grpo/lib/python3.11/site-packages:$PYTHONPATH
-export WANDB_RUN_NAME=Qwen3.5-VL-VG-GRPO-$(date +%Y-%m-%d-%H-%M-%S)
+export WANDB_RUN_NAME=Qwen3.5-VL-VG-3k-GRPO-$(date +%Y-%m-%d-%H-%M-%S)
 export WANDB_MODE=offline
 export WANDB_DIR=/arf/scratch/aalatan/FewShotReasoning/train/wandb
 export GPUS_PER_NODE=4
 export MASTER_ADDR=$(scontrol show hostname $SLURM_JOB_NODELIST | head -n 1)
-export MASTER_PORT=29500
+export MASTER_PORT=29503
 export TQDM_MININTERVAL=1
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1
@@ -35,9 +35,9 @@ mkdir -p $WANDB_DIR
 echo "========== Job Info =========="
 echo "Run: $WANDB_RUN_NAME"
 echo "Base model: qwen35-cot-vg-merged (Qwen3.5-VL, SFT+CoT on VG)"
-echo "Dataset: VHM_dataset_grpo_vg_only_2k (VG-only, boxes rescaled 0-1000 -> 0-800)"
-echo "Goal: recover VG precision lost in the CoT stage (0.7565 SFT-only -> 0.7223 SFT+CoT on VG_DOIR_RSVG_test), ideally beyond SFT-only"
-echo "Image pixel bounds match the SFT/CoT stages (256*28*28 - 1280*28*28)"
+echo "Dataset: VHM_dataset_grpo_vg_3k (3000 fresh examples sampled from the 30244-example VG SFT pool, ~3.5x the original 843-example GRPO set)"
+echo "Goal: more prompt diversity per epoch -> more real GRPO learning signal, less repetition of the same 843 examples"
+echo "Same stabilized hyperparams as the first successful VG GRPO run (beta=0.01, lr=1e-6, warmup=0.1)"
 echo "=============================="
 
 python -u -m torch.distributed.run \
@@ -51,7 +51,7 @@ python -u -m torch.distributed.run \
     --deepspeed local_scripts/zero3.json \
     --output_dir checkpoints/${WANDB_RUN_NAME} \
     --model_name_or_path /arf/scratch/aalatan/Re-CoT/Qwen-VL-Series-Finetune/output/qwen35-cot-vg-merged \
-    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_vg_only_2k \
+    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_vg_3k \
     --max_completion_length 8192 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \

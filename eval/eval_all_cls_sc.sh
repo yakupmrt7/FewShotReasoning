@@ -4,7 +4,7 @@
 # Usage: ./eval_all_cls_sc.sh
 # Only change MODEL_PATH and SC params below!
 
-MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-CLS-1400Easy-600Hard-Temp1.5-1epoch2026-02-21-15-29-13/final"
+MODEL_PATH="/arf/scratch/aalatan/FewShotReasoning/train/checkpoints/Qwen-VL-2B-GRPO-500Easy-500Hard-Temp1.5-2epoch-cosine2026-02-24-14-42-14/final"
 
 # Self-Consistency parameters
 N_SAMPLES=7

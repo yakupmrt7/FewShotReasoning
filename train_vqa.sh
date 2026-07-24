@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --account=ogam6
-#SBATCH --job-name=grpo_vg_qwen35
-#SBATCH --output=grpo-%j.out
-#SBATCH --error=grpo-%j.err
+#SBATCH --job-name=grpo_vqa_qwen35
+#SBATCH --output=grpo_vqa-%j.out
+#SBATCH --error=grpo_vqa-%j.err
 #SBATCH --partition=kolyoz-cuda
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
@@ -20,12 +20,12 @@ cd /arf/scratch/aalatan/FewShotReasoning/train
 chmod +x /arf/home/aalatan/mert/envs/recot-train-grpo/lib/python3.11/site-packages/wandb/bin/wandb-core
 
 export PYTHONPATH=/arf/scratch/aalatan/FewShotReasoning/train:/arf/scratch/aalatan/FewShotReasoning/train/src:/arf/home/aalatan/mert/envs/recot-train-grpo/lib/python3.11/site-packages:$PYTHONPATH
-export WANDB_RUN_NAME=Qwen3.5-VL-VG-GRPO-$(date +%Y-%m-%d-%H-%M-%S)
+export WANDB_RUN_NAME=Qwen3.5-VL-VQA-GRPO-$(date +%Y-%m-%d-%H-%M-%S)
 export WANDB_MODE=offline
 export WANDB_DIR=/arf/scratch/aalatan/FewShotReasoning/train/wandb
 export GPUS_PER_NODE=4
 export MASTER_ADDR=$(scontrol show hostname $SLURM_JOB_NODELIST | head -n 1)
-export MASTER_PORT=29500
+export MASTER_PORT=29501
 export TQDM_MININTERVAL=1
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1
@@ -34,10 +34,8 @@ mkdir -p $WANDB_DIR
 
 echo "========== Job Info =========="
 echo "Run: $WANDB_RUN_NAME"
-echo "Base model: qwen35-cot-vg-merged (Qwen3.5-VL, SFT+CoT on VG)"
-echo "Dataset: VHM_dataset_grpo_vg_only_2k (VG-only, boxes rescaled 0-1000 -> 0-800)"
-echo "Goal: recover VG precision lost in the CoT stage (0.7565 SFT-only -> 0.7223 SFT+CoT on VG_DOIR_RSVG_test), ideally beyond SFT-only"
-echo "Image pixel bounds match the SFT/CoT stages (256*28*28 - 1280*28*28)"
+echo "Base model: qwen35-replay-vqa-merged (Qwen3.5-VL, SFT+replay on VQA; no cot-vqa-merged checkpoint exists on disk)"
+echo "Dataset: VHM_dataset_grpo_vqa_only_2k_363 (VQA-only, 363 examples, answer_type=1 exact-match)"
 echo "=============================="
 
 python -u -m torch.distributed.run \
@@ -50,8 +48,8 @@ python -u -m torch.distributed.run \
     src/open_r1/grpo.py \
     --deepspeed local_scripts/zero3.json \
     --output_dir checkpoints/${WANDB_RUN_NAME} \
-    --model_name_or_path /arf/scratch/aalatan/Re-CoT/Qwen-VL-Series-Finetune/output/qwen35-cot-vg-merged \
-    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_vg_only_2k \
+    --model_name_or_path /arf/scratch/aalatan/Re-CoT/Qwen-VL-Series-Finetune/output/qwen35-replay-vqa-merged \
+    --dataset_name /arf/scratch/aalatan/VHM_dataset_grpo_vqa_only_2k_363 \
     --max_completion_length 8192 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
