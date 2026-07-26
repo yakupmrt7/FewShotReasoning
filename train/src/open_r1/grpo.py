@@ -184,9 +184,56 @@ def format_reward(completions, **kwargs):
     return [0.2 if match else 0.0 for match in matches]
 
 
+def accuracy_reward_vg_shaped(completions, solution, **kwargs):
+    """VG-only reward reshaping (Phase C of the improvement plan): format is a hard gate
+    (0 reward if the completion doesn't match <reasoning>...</reasoning><answer>...</answer>,
+    not a separate +0.2 bonus), and the bbox score is dense IoU plus a threshold bonus at
+    IoU >= 0.5 -- matching the eval metric (precision@IoU 0.5) instead of paying equally for
+    IoU improvements that don't cross it. Max reward is 2.0, same budget as the old
+    accuracy(2x weight) + format(0.2) combination. Only meaningful for bbox (answer_type '2')
+    solutions; not used for CLS/VQA.
+    """
+    contents = [completion[0]["content"] for completion in completions]
+    rewards = []
+    format_pattern = r"<reasoning>.*?</reasoning>\s*<answer>.*?</answer>"
+
+    for content, sol in zip(contents, solution):
+        reward = 0.0
+        answer = sol[1]
+
+        if re.match(format_pattern, content, re.DOTALL):
+            answer_match = re.search(r"<answer>(.*?)</answer>", content, re.DOTALL)
+            student_answer = answer_match.group(1).strip() if answer_match else content.strip()
+            try:
+                nums = [int(n) for n in re.findall(r'\d+', student_answer)]
+                student_box = [nums[i:i + 4] for i in range(0, len(nums), 4)][0]
+
+                nums_gt = [int(n) for n in re.findall(r'\d+', answer)]
+                ground_truth = [nums_gt[i:i + 4] for i in range(0, len(nums_gt), 4)][0]
+
+                x1 = max(student_box[0], ground_truth[0])
+                y1 = max(student_box[1], ground_truth[1])
+                x2 = min(student_box[2], ground_truth[2])
+                y2 = min(student_box[3], ground_truth[3])
+                intersection = max(0, x2 - x1) * max(0, y2 - y1)
+                area_student = (student_box[2] - student_box[0]) * (student_box[3] - student_box[1])
+                area_ground_truth = (ground_truth[2] - ground_truth[0]) * (ground_truth[3] - ground_truth[1])
+                union = area_student + area_ground_truth - intersection
+                iou = intersection / union if union > 0 else 0
+                reward = iou + (1.0 if iou >= 0.5 else 0.0)
+            except Exception as e:
+                print(f"IoU error: {e}")
+                reward = 0.0
+        # else: malformed completion -> reward stays 0.0 (format is a gate, not a bonus)
+
+        rewards.append(reward)
+    return rewards
+
+
 reward_funcs_registry = {
     "accuracy": accuracy_reward,
     "format": format_reward,
+    "accuracy_shaped": accuracy_reward_vg_shaped,
 }
 
 SYSTEM_PROMPT = (
