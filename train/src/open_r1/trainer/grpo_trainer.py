@@ -276,12 +276,18 @@ class Qwen2VLGRPOTrainer(Trainer):
         self.max_prompt_length = args.max_prompt_length
         self.max_completion_length = args.max_completion_length  # = |o_i| in the GRPO paper
         self.num_generations = args.num_generations  # = G in the GRPO paper
-        # GENERATION CONFIG - Update in your grpo.py file:
+        # Sampling temperature for the rollouts. Taken from GRPOConfig (default 1.0) rather
+        # than hardcoded: it was previously pinned at 1.5, which is far hotter than the
+        # 0.7-1.0 GRPO is normally run at, and -- because nothing overrode it -- silently
+        # applied to every run. It MUST match the temperature used to compute log-probs in
+        # get_per_token_logps below, or the policy gradient is evaluated under a different
+        # distribution than the one that drew the samples.
+        self.temperature = args.temperature
 
         self.generation_config = GenerationConfig(
             max_new_tokens=self.max_completion_length,
             do_sample=True,
-            temperature=1.5,
+            temperature=self.temperature,
             top_k=40,
             top_p=0.95,
             num_return_sequences=self.num_generations,
@@ -469,6 +475,11 @@ class Qwen2VLGRPOTrainer(Trainer):
             logits = model(input_ids, **kwargs).logits  # (B, L, V)
             logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
             input_ids = input_ids[:, 1:]  # (B, L-1), exclude the first input ID since we don't have logits for it
+            # Match the sampling distribution. The completions were drawn from softmax(logits/T),
+            # so the log-probs the policy gradient is computed from have to use the same T.
+            # Without this the samples come from one distribution and the gradient is taken
+            # under another -- off-policy with no importance correction, i.e. a biased update.
+            logits = logits / self.temperature
             # Compute the log probabilities for the input tokens. Use a loop to reduce memory peak.
             per_token_logps = []
             for logits_row, input_ids_row in zip(logits, input_ids):
