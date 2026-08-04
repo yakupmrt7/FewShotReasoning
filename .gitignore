@@ -3,3 +3,4 @@
 *.out
 *.err
 eval/eval_results/
+qwen0.8b

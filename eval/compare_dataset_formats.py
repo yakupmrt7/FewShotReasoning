@@ -259,8 +259,8 @@ def compare_datasets(dataset1_path, dataset2_path):
 
 def main():
     # Paths to compare
-    dataset1_path = "/arf/scratch/aalatan/VHM_dataset_grpo_vqa_only_2k_proper"
-    dataset2_path = "/arf/scratch/aalatan/VHM_dataset_grpo_vqa_self_eval_misclassified"
+    dataset1_path = "/arf/scratch/aalatan/grpo_data/VHM_dataset_grpo_vqa_only_2k_proper"
+    dataset2_path = "/arf/scratch/aalatan/grpo_data/VHM_dataset_grpo_vqa_self_eval_misclassified"
 
     print(f"\nDataset 1 (Reference): {dataset1_path}")
     print(f"Dataset 2 (New):       {dataset2_path}\n")

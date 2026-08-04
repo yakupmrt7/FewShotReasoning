@@ -240,7 +240,7 @@ def main():
     eval_json_path = "/arf/scratch/aalatan/FewShotReasoning/eval/eval_results/CLS_self-eval/CLS_self-eval_Qwen-2VL-2B-CLS-CoT_eval.json"
     cot_json_path = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval.json"
     image_dir = "/arf/scratch/aalatan/Datasets_Self-Eval_CLS/CLS_self-eval"
-    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_cls_600_1400"
+    output_dir = "/arf/scratch/aalatan/grpo_data/VHM_dataset_grpo_cls_600_1400"
 
     # Configuration
     TARGET_MISCLASSIFIED = 600  # 30% hard (misclassified)

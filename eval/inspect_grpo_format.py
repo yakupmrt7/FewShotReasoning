@@ -3,7 +3,7 @@
 
 from datasets import load_from_disk
 
-dataset_path = "/arf/scratch/aalatan/VHM_dataset_grpo_vqa_only_2k_proper"
+dataset_path = "/arf/scratch/aalatan/grpo_data/VHM_dataset_grpo_vqa_only_2k_proper"
 dataset = load_from_disk(dataset_path)
 
 print("Dataset structure:", dataset)

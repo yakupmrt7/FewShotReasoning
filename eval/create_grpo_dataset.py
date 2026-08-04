@@ -174,7 +174,7 @@ def main():
     eval_json_path = "/arf/scratch/aalatan/FewShotReasoning/eval/eval_results/Self_eval/vqa_LR-pre/VQA_self-eval_Qwen2VL-2B-VQA-CoT_eval.json"
     cot_json_path = "/arf/scratch/aalatan/Datasets_Self-Eval/VQA_self-eval.json"
     image_dir = "/arf/scratch/aalatan/Datasets_Self-Eval/VQA_self-eval"
-    output_dir = "/arf/scratch/aalatan/VHM_dataset_grpo_vqa_self_eval_misclassified"
+    output_dir = "/arf/scratch/aalatan/grpo_data/VHM_dataset_grpo_vqa_self_eval_misclassified"
 
     # Load data
     print("Loading evaluation results...")
